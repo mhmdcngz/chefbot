@@ -1,14 +1,10 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { ChefHat, User, Heart, AlertTriangle } from 'lucide-react';
+import { Message } from '../types';
 
 interface ChatMessageProps {
-  message: {
-    id: string;
-    text: string;
-    sender: 'user' | 'bot';
-    warning?: string | null;
-  };
+  message: Message;
   onToggleFavorite?: (id: string, text: string) => void;
   onSelect?: (text: string) => void;
   isFavorite?: boolean;

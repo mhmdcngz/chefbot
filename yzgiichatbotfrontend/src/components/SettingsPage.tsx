@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { X, Palette, Image as ImageIcon, ChefHat, Send } from 'lucide-react';
 import { getDerivedThemeVars } from '../utils/themeColors';
-
-export type BackgroundMode = 'none' | 'subtle' | 'dense';
+import { BackgroundMode } from '../theme';
 
 interface SettingsPageProps {
   customColor: string;

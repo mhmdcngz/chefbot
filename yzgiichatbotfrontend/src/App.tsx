@@ -4,15 +4,17 @@ import MessageInput from './components/MessageInput';
 import Sidebar from './components/Sidebar';
 import FavoritesPanel, { Favorite } from './components/FavoritesPanel';
 import BackgroundPattern from './components/BackgroundPattern';
-import SettingsPage, { BackgroundMode } from './components/SettingsPage';
+import SettingsPage from './components/SettingsPage';
+import { BackgroundMode } from './theme';
+import { Message, ChatSession } from './types';
 import { ChefHat, Heart, Menu } from 'lucide-react';
 import { getDerivedThemeVars } from './utils/themeColors';
 
 function App() {
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
-  const [sessions, setSessions] = useState<{ id: string; title: string; messages: any[] }[]>([]);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -37,12 +39,12 @@ function App() {
     localStorage.setItem('chefbot-bg', backgroundMode);
   }, [backgroundMode]);
 
-  const syncSession = (id: string, msgs: any[]) => {
+  const syncSession = (id: string, msgs: Message[]) => {
     setSessions(prev => prev.map(s => s.id === id ? { ...s, messages: msgs } : s));
   };
 
   const handleSendMessage = async (text: string) => {
-    const newUserMsg = { id: Date.now().toString(), text, sender: 'user' };
+    const newUserMsg: Message = { id: Date.now().toString(), text, sender: 'user' };
 
     let sessionId = activeSessionId;
 
@@ -59,7 +61,7 @@ function App() {
     setIsLoading(true);
 
     try {
-      const history = withUser.slice(0, -1).slice(-8).map((m: any) => ({
+      const history = withUser.slice(0, -1).slice(-8).map((m) => ({
         role: m.sender === 'user' ? 'user' : 'assistant',
         content: m.text,
       }));
@@ -76,7 +78,7 @@ function App() {
       }
 
       const data = await res.json();
-      const botMsg = {
+      const botMsg: Message = {
         id: (Date.now() + 1).toString(),
         text: data.answer,
         sender: 'bot',
@@ -85,10 +87,11 @@ function App() {
       const withBot = [...withUser, botMsg];
       setMessages(withBot);
       if (sessionId) syncSession(sessionId, withBot);
-    } catch (err: any) {
-      const withError = [...withUser, {
+    } catch (err) {
+      const detay = err instanceof Error ? err.message : String(err);
+      const withError: Message[] = [...withUser, {
         id: (Date.now() + 1).toString(),
-        text: `Bir hata oluştu: ${err.message}`,
+        text: `Bir hata oluştu: ${detay}`,
         sender: 'bot',
       }];
       setMessages(withError);
