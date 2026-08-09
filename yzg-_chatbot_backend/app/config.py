@@ -46,7 +46,7 @@ class Settings(BaseSettings):
         validation_alias="DEFAULT_TOP_K",
     )
 
-    # Gelecekte LLM sağlayıcıları için (şimdilik opsiyonel)
+    # LLM sağlayıcısı ayarları
     groq_api_key: str | None = Field(default=None)
     groq_model: str = Field(
         default="llama-3.1-8b-instant",
@@ -56,10 +56,9 @@ class Settings(BaseSettings):
         default="https://api.groq.com/openai/v1",
         description="Groq OpenAI-uyumlu API taban URL'i",
     )
-    anthropic_api_key: str | None = Field(default=None)
     llm_provider: str = Field(
         default="mock",
-        description="mock | groq | anthropic",
+        description="groq | mock (bilinmeyen değer mock'a düşer)",
     )
 
     def cors_origins_list(self) -> list[str]:

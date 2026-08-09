@@ -74,10 +74,13 @@ Bloklayan tüm çağrılar (`encode`, Chroma sorgusu, ingestion) `asyncio.to_thr
 
 ### LLM soyutlaması (`llm_service.py`)
 
-`LLMService` Protocol'ünü uygulayan üç sınıf, `LLM_PROVIDER` ile seçilir (`get_llm_service`):
-- `mock` (varsayılan) — anahtarsız geliştirme
-- `groq` — OpenAI uyumlu endpoint; 429'da `retry-after` ile 3 deneme; yanıtta aynı satır 2'den fazla tekrarlıyorsa kesilir (küçük modellerde döngü koruması)
-- `anthropic`/`claude` — `NotImplementedError` → `/chat` bunu HTTP 501'e çevirir
+**Sağlayıcı Groq'tur.** Anthropic/Claude entegrasyonu bilinçli olarak yok — geri eklenmemeli.
+
+`LLMService` Protocol'ünü uygulayan iki sınıf, `LLM_PROVIDER` ile seçilir (`get_llm_service`); bilinmeyen değer mock'a düşer:
+- `groq` — OpenAI uyumlu endpoint; 429'da `retry-after` ile 3 deneme (`_parse_retry_after`, ondalıklı başlığı da okur, 60 sn üst sınır)
+- `mock` (kod varsayılanı) — anahtarsız geliştirme; `GROQ_API_KEY` yoksa `groq` seçmek `/chat`'te 500 üretir
+
+`_trim_repetitions`: küçük modellerin takıldığı tekrar döngüsünü keser (aynı satır 2'den fazla → kalanı at). Markdown yapı satırları (`---`, `####`, `|`, `>`) sayıma girmez — tarif şablonu birden çok `---` içerdiği için bunlar sayılsaydı yanıt ortadan kırpılırdı.
 
 Geçmiş: frontend son 8 mesajı gönderir, Groq katmanı yine son 8'i modele iletir.
 

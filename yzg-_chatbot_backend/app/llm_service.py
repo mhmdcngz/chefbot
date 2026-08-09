@@ -1,10 +1,11 @@
 """
-LLM soyutlaması: şimdilik Mock; Groq/Claude eklendiğinde aynı arayüz kullanılır.
+LLM soyutlaması: Groq (gerçek sağlayıcı) ve Mock (anahtarsız geliştirme).
 """
 
 from __future__ import annotations
 
 import asyncio
+import re
 import httpx
 from typing import Protocol, runtime_checkable
 
@@ -47,6 +48,41 @@ class LLMService(Protocol):
     ) -> str:
         """Kullanıcı sorusu, RAG bağlamı ve konuşma geçmişine göre asenkron metin üretir."""
         ...
+
+
+# Markdown yapı satırları (ayraç, başlık, tablo) meşru olarak tekrar eder; tekrar sayımına girmez.
+_STRUCTURAL_LINE = re.compile(r"^(-{3,}|\*{3,}|_{3,}|#{1,6}\s|\||>)")
+
+
+def _parse_retry_after(raw: str | None, default: float = 10.0) -> float:
+    """
+    429 yanıtındaki retry-after saniyesini okur.
+    Groq bu başlığı ondalıklı ("7.66") döndürebildiği için float ile ayrıştırılır;
+    okunamazsa varsayılan, aşırı uzun beklemeyi önlemek için üst sınır 60 sn.
+    """
+    try:
+        seconds = float(raw)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    return max(0.0, min(seconds, 60.0))
+
+
+def _trim_repetitions(content: str, max_repeat: int = 2) -> str:
+    """
+    Küçük modellerin takıldığı tekrar döngüsünü keser: aynı satır max_repeat'ten
+    fazla geçtiğinde kalanı atar. Markdown yapı satırları sayılmaz — aksi halde
+    tarif şablonundaki üçüncü '---' tüm yanıtı kırpardı.
+    """
+    seen: dict[str, int] = {}
+    kept: list[str] = []
+    for line in content.split("\n"):
+        key = line.strip()
+        if key and not _STRUCTURAL_LINE.match(key):
+            seen[key] = seen.get(key, 0) + 1
+            if seen[key] > max_repeat:
+                break
+        kept.append(line)
+    return "\n".join(kept).strip()
 
 
 def _build_user_content(user_message: str, context: str) -> str:
@@ -133,7 +169,7 @@ class GroqLLMService:
             for attempt in range(max_retries):
                 response = await client.post(url, headers=headers, json=payload)
                 if response.status_code == 429:
-                    retry_after = int(response.headers.get("retry-after", "10"))
+                    retry_after = _parse_retry_after(response.headers.get("retry-after"))
                     if attempt < max_retries - 1:
                         await asyncio.sleep(retry_after)
                         continue
@@ -152,45 +188,18 @@ class GroqLLMService:
         content = (message.get("content") or "").strip()
         if not content:
             raise RuntimeError("Groq boş içerik döndü.")
-        # Tekrar döngüsü koruması: aynı cümle 3'ten fazla geçiyorsa kes
-        lines = content.split('\n')
-        seen: dict[str, int] = {}
-        clean_lines = []
-        for line in lines:
-            key = line.strip()
-            if key:
-                seen[key] = seen.get(key, 0) + 1
-                if seen[key] > 2:
-                    break
-            clean_lines.append(line)
-        return '\n'.join(clean_lines).strip()
-
-
-class ClaudeLLMService:
-    """Gelecek: Anthropic Claude entegrasyonu."""
-
-    def __init__(self, settings: Settings | None = None) -> None:
-        self._settings = settings or get_settings()
-
-    async def generate(
-        self, user_message: str, context: str, history: list[dict] | None = None
-    ) -> str:
-        raise NotImplementedError("ClaudeLLMService henüz uygulanmadı; LLM_PROVIDER=mock kullanın.")
+        return _trim_repetitions(content)
 
 
 def get_llm_service(settings: Settings | None = None) -> LLMService:
     """
-    Ortam değişkenine göre LLM sağlayıcısı döndürür.
-    Şimdilik yalnızca mock üretir; groq/anthropic seçilirse NotImplemented hatası verir.
+    LLM_PROVIDER'a göre sağlayıcı döndürür: groq (gerçek) veya mock (anahtarsız geliştirme).
+    Bilinmeyen değerlerde güvenli tarafta kalıp mock döner.
     """
     s = settings or get_settings()
     provider = (s.llm_provider or "mock").lower().strip()
-    if provider == "mock":
-        return MockLLMService(s)
     if provider == "groq":
         return GroqLLMService(s)
-    if provider in ("anthropic", "claude"):
-        return ClaudeLLMService(s)
     return MockLLMService(s)
 
 
@@ -199,7 +208,6 @@ __all__ = [
     "LLMService",
     "MockLLMService",
     "GroqLLMService",
-    "ClaudeLLMService",
     "get_llm_service",
     "_build_user_content",
 ]

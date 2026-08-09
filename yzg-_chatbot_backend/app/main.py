@@ -160,8 +160,6 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
     try:
         history = [{"role": h.role, "content": h.content} for h in body.history]
         answer = await llm.generate(body.message, rag_result.context, history)
-    except NotImplementedError as e:
-        raise HTTPException(status_code=501, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"LLM hatası: {e}") from e
 
