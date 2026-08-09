@@ -25,20 +25,21 @@ from app.schemas import ChatRequest, ChatResponse, SourceItem
 # görünsün diye uvicorn'un hata kanalını kullanıyoruz (aksi halde INFO kaybolur).
 logger = logging.getLogger("uvicorn.error")
 
-_ORDINAL_WORDS = {
-    "ilk", "birinci", "ikinci", "üçüncü", "dördüncü", "beşinci",
-    "altıncı", "yedinci", "sekizinci", "dokuzuncu", "onuncu",
-    "1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9.", "10.",
+_ORDINAL_TO_INDEX = {
+    "ilk": 1, "birinci": 1, "ikinci": 2, "üçüncü": 3, "dördüncü": 4,
+    "beşinci": 5, "altıncı": 6, "yedinci": 7, "sekizinci": 8,
+    "dokuzuncu": 9, "onuncu": 10,
 }
+_ORDINAL_WORDS = set(_ORDINAL_TO_INDEX) | {f"{i}." for i in range(1, 11)}
 
 
 def _is_reference_query(msg: str) -> bool:
-    """Sıralı/işaret referansı içeren kısa sorgu mu? (RAG atlanır)"""
+    """Sıralı/işaret referansı içeren kısa sorgu mu? (seçim bağlamı sayılır)"""
     words = msg.lower().split()
     return len(words) <= 5 and any(w in _ORDINAL_WORDS for w in words)
 
 
-_NUMBERED_LINE = re.compile(r"^\s*\d+\.\s+\S", re.MULTILINE)
+_NUMBERED_ITEM = re.compile(r"^\s*(\d+)\.\s+(\S.*)$", re.MULTILINE)
 
 
 def _offers_selection(assistant_text: str) -> bool:
@@ -47,23 +48,60 @@ def _offers_selection(assistant_text: str) -> bool:
 
     Yalnızca "Hangisini istersiniz?" ifadesine bakmak yetmiyor: model bazen
     hiç liste vermeden bu cümleyi ekliyor (ör. dökümanlarda uygun tarif
-    bulunamadığında). O durumda RAG'ı atlamak, sonraki mesajı bağlamsız
-    bırakıyordu. Frontend de çipleri numaralı satırlara göre üretiyor;
-    iki taraf aynı ölçütü kullanmalı.
+    bulunamadığında). O durumda sonraki mesaj bağlamsız kalıyordu. Frontend de
+    çipleri numaralı satırlara göre üretiyor; iki taraf aynı ölçütü kullanmalı.
     """
     return "Hangisini istersiniz" in assistant_text and bool(
-        _NUMBERED_LINE.search(assistant_text)
+        _NUMBERED_ITEM.search(assistant_text)
     )
 
 
 def _is_list_selection(msg: str, history: list) -> bool:
-    """Önceki bot mesajında liste varsa ve kullanıcı kısa bir seçim yaptıysa RAG'ı atla."""
+    """Önceki bot mesajında liste varsa ve kullanıcı kısa bir cevap verdiyse seçimdir."""
     if len(msg.split()) > 7 or '?' in msg:
         return False
     for h in reversed(history):
         if h.role == "assistant":
             return _offers_selection(h.content)
     return False
+
+
+def _last_offered_list(history: list) -> dict[int, str]:
+    """Son asistan mesajındaki numaralı listeyi {sıra: tarif adı} olarak çıkarır."""
+    for h in reversed(history):
+        if h.role == "assistant":
+            if not _offers_selection(h.content):
+                return {}
+            items: dict[int, str] = {}
+            for num, rest in _NUMBERED_ITEM.findall(h.content):
+                # Satır biçimi "3. Çerkez Tavuğu: kısa açıklama" — adı açıklamadan ayır.
+                name = re.sub(r"[*_`]", "", rest.split(":", 1)[0]).strip(" .-")
+                if name:
+                    items[int(num)] = name
+            return items
+    return {}
+
+
+def _resolve_selection(msg: str, items: dict[int, str]) -> str | None:
+    """
+    Kullanıcının seçimini listedeki tarif adına çözer: rakam ("2"), sıra sözcüğü
+    ("ikinci") veya doğrudan isim. Çözülen ad RAG sorgusu olarak kullanılır;
+    "2" ile arama yapmak alakasız tarifler getireceği için bu adım şart.
+    """
+    if not items:
+        return None
+    lowered = msg.lower()
+    for word in lowered.split():
+        stripped = word.strip(".,!?:")
+        if stripped.isdigit() and int(stripped) in items:
+            return items[int(stripped)]
+        index = _ORDINAL_TO_INDEX.get(stripped)
+        if index in items:
+            return items[index]
+    for name in items.values():
+        if name.lower() in lowered or lowered in name.lower():
+            return name
+    return None
 
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["20/minute"])
@@ -174,15 +212,30 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
     top_k = body.top_k if body.top_k is not None else settings.default_top_k
 
     try:
-        skip_rag = (
-            (_is_reference_query(msg) and body.history) or
-            _is_list_selection(msg, body.history)
+        # Seçim akışında da RAG'dan şaşmıyoruz: kullanıcı "2" ya da "ikinci" dediğinde
+        # bu metinle arama yapmak anlamsız, ama aramayı büsbütün atlamak da tarifi
+        # modelin belleğine bırakır (uydurma malzeme/miktar üretir). Bunun yerine
+        # seçim, önceki listedeki tarif adına çözülüp arama onunla yapılır.
+        in_selection = bool(body.history) and (
+            _is_reference_query(msg) or _is_list_selection(msg, body.history)
         )
-        if skip_rag:
+        selection = (
+            _resolve_selection(msg, _last_offered_list(body.history)) if in_selection else None
+        )
+
+        if selection:
+            logger.info("Secim cozuldu: %r -> %r", msg, selection)
+            rag_result = await rag.retrieve(selection, top_k)
+        elif _is_reference_query(msg) and body.history:
+            # "ikinci" listedeki bir maddeye çözülemedi (ör. liste kaymış).
+            # Bu metinle arama alakasız tarifler getireceği için bağlamsız gidiyoruz;
+            # sistem promptu bu durumda tarif uydurmayı değil, sormayı söylüyor.
             rag_result = RAGRetrieveResult(
                 context="", sources=[], raw_documents=[], collection_empty=False
             )
         else:
+            # Liste sonrası gelen ama seçime çözülemeyen kısa mesaj ("mercimek çorbası")
+            # yeni bir aramadır; normal RAG yolundan geçer.
             rag_result = await rag.retrieve(msg, top_k)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"RAG hatası: {e}") from e
@@ -195,9 +248,19 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
             "Veri yüklemek için: python vector_db_builder.py <dosya.json>"
         )
 
+    # Seçimi modele de bildiriyoruz: ham "üçüncü" mesajıyla model bağlamdaki
+    # dökümanlardan hangisinin kastedildiğini bilemiyor (bağlam sırası listedeki
+    # sırayla aynı değil) ve yanlış tarifi anlatabiliyor.
+    llm_message = (
+        f"{msg}\n\n(Seçilen tarif: {selection}. Doğrudan tarif şablonuyla başla, "
+        f"giriş cümlesi yazma.)"
+        if selection
+        else body.message
+    )
+
     try:
         history = [{"role": h.role, "content": h.content} for h in body.history]
-        answer = await llm.generate(body.message, rag_result.context, history)
+        answer = await llm.generate(llm_message, rag_result.context, history)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"LLM hatası: {e}") from e
 

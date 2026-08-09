@@ -61,20 +61,27 @@ Bloklayan tüm çağrılar (`encode`, Chroma sorgusu, ingestion) `asyncio.to_thr
 `llm_service.py`'deki `SYSTEM_PROMPT_TURKISH_CHEF` modelden iki mod ister: numaralı liste (son satır `Hangisini istersiniz?`) veya tek tarif şablonu. Bu ifade üç yerde string olarak aranır:
 
 1. `llm_service.py` — sistem promptu bunu üretmesini söyler
-2. `main.py:_is_list_selection` — son asistan mesajında görürse ve kullanıcı kısa cevap verdiyse **RAG atlanır** (seçim, arama değil)
+2. `main.py:_is_list_selection` — son asistan mesajında görürse ve kullanıcı kısa cevap verdiyse mesaj **seçim** sayılır; `_last_offered_list` numaralı satırlardan tarif adlarını çıkarır
 3. `ChatMessage.tsx` — bu ifadeyi içeren yanıtta numaralı satırları ayrıştırıp tıklanabilir "seçim çipi" üretir
 
 İfadeyi ya da liste biçimini değiştiriyorsan üçünü birlikte değiştir.
 
-### RAG atlama sezgileri (`main.py`)
+### Seçim akışı ve RAG (`main.py`)
 
-- 5 karakterden kısa veya 2 kelimeden az mesaj → RAG/LLM'e hiç gitmeden hazır uyarı yanıtı
-- `_is_reference_query`: ≤5 kelime ve sıra sözcüğü içeriyorsa ("ikinci", "3.") → RAG atlanır, LLM geçmişten cevaplar
-- Atlama durumunda boş `RAGRetrieveResult` üretilir; LLM bağlamsız çağrılır
+Her yolda RAG'dan geçilir; tarif metni bağlama girmeden yanıt üretilmez. Kullanıcı "2" ya da "ikinci" dediğinde bu metinle arama yapmak anlamsız, aramayı atlamak ise tarifi modelin belleğine bırakır (uydurma malzeme/miktar üretir). Bu yüzden seçim önce **çözülür**:
+
+- `_is_reference_query` (≤5 kelime + sıra sözcüğü) veya `_is_list_selection` → seçim bağlamı
+- `_last_offered_list` son asistan mesajındaki numaralı listeyi `{sıra: tarif adı}` olarak çıkarır
+- `_resolve_selection` rakam ("2"), sıra sözcüğü ("ikinci") veya isimle eşleştirir
+- Çözülen **tarif adı** RAG sorgusu olur; ayrıca LLM'e giden mesaja `(Seçilen tarif: X ...)` notu eklenir — bağlam sırası listedeki sırayla aynı olmadığı için model aksi halde yanlış tarifi anlatıyor
+- Yalnızca seçim çözülemezse boş `RAGRetrieveResult` üretilir (kısa mesajla arama alakasız tarif getirir)
+- 5 karakterden kısa **ve** 2 kelimeden az ilk mesaj → RAG/LLM'e hiç gitmeden hazır uyarı yanıtı
 
 ### LLM soyutlaması (`llm_service.py`)
 
 **Tek sağlayıcı: Gemini**, OpenAI-uyumlu endpoint üzerinden (`GeminiLLMService`). Groq ve Anthropic yolları bilinçli olarak kaldırıldı — geri eklenmemeli.
+
+**Uydurma yasağı — sistem promptunun temel kuralı.** Tarifler yalnızca dökümanlardan verilir; malzeme, miktar, süre, yöntem ve adımlar uydurulmaz, istenen tarif yoksa model bunu söyler. `_build_user_content` bağlamsız dalda da tarif vermeyi yasaklar. Bu yasak **liste modunu kapsamaz**: KURAL 5 modele gelen dökümanların hepsini değerlendirip en az 3 madde listelemesini söyler. Bu kural olmadan model "kolay tatlı" gibi sorgularda kritere tam uymayanları eleyip tek maddelik liste üretiyordu.
 
 **Mock sağlayıcı yok, bilinçli bir karar.** Anahtar eksikse veya API hata verirse sahte yanıt üretilmez; hata `/chat`'ten 500 + `detail` olarak döner ve frontend bunu sohbet balonunda gösterir. Bu yüzden hata mesajları kullanıcıya okunur olmalı: `_api_error` sağlayıcının gövdedeki mesajını çıkarır (`raise_for_status()` sadece durum kodunu verir, "model bulunamadı" gibi asıl bilgi gövdededir).
 
@@ -106,4 +113,6 @@ Hız sınırı: slowapi, IP başına 20/dakika. `/chat` imzasındaki `request: R
 
 ## Repo durumu
 
-Klasörler yakın zamanda `yzgii/` altından kök dizine taşındı; `git status` bunu eski yolların silinmesi + iki takipsiz dizin olarak gösteriyor (henüz commit edilmedi). `git log --follow` olmadan dosya geçmişi kopuk görünür.
+Klasörler `yzgii/` altından kök dizine taşındı (commit `fb70ed2`). `git log --follow` olmadan dosya geçmişi kopuk görünür.
+
+Vektör veritabanı hazır durumda geldi: `yzg-_chatbot_backend/turkish_cuisine_db/` içinde **3320 tarif** var (`.gitignore`'da, repoda tutulmuyor). Kaynak JSON repoda yok, dolayısıyla ingestion'ı yeniden koşmak mümkün değil — DB'yi silme. Veride küçük bir artık var: ölçüsü olmayan malzemeler doküman metnine `None None kırmızı toz biber` biçiminde girmiş; bilinçli olarak bırakıldı.
