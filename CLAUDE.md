@@ -6,14 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ŞefBot — Türk mutfağı RAG sohbet asistanı. İki bağımsız uygulama:
 
-- `yzg-_chatbot_backend/` — FastAPI + ChromaDB + sentence-transformers
-- `yzgiichatbotfrontend/` — React 18 + TypeScript + Vite (kütüphanesiz CSS)
+- `backend/` — FastAPI + ChromaDB + sentence-transformers
+- `frontend/` — React 18 + TypeScript + Vite (kütüphanesiz CSS)
 
 **Dil kuralı:** Tüm kullanıcıya görünen metinler, docstring'ler ve yorumlar Türkçe. Kod tanımlayıcıları İngilizce, veri alanları Türkçe (`tarif_adi`, `malzemeler`, `yapilis_adimlari`).
 
 ## Komutlar
 
-Backend (`yzg-_chatbot_backend/` içinden çalıştır — importlar `app.*` mutlak yolunu kullanır):
+Backend (`backend/` içinden çalıştır — importlar `app.*` mutlak yolunu kullanır):
 
 ```bash
 python -m venv venv && source venv/bin/activate
@@ -115,4 +115,4 @@ Hız sınırı: slowapi, IP başına 20/dakika. `/chat` imzasındaki `request: R
 
 Klasörler `yzgii/` altından kök dizine taşındı (commit `fb70ed2`). `git log --follow` olmadan dosya geçmişi kopuk görünür.
 
-Vektör veritabanı hazır durumda geldi: `yzg-_chatbot_backend/turkish_cuisine_db/` içinde **3320 tarif** var (`.gitignore`'da, repoda tutulmuyor). Kaynak JSON repoda yok, dolayısıyla ingestion'ı yeniden koşmak mümkün değil — DB'yi silme. Veride küçük bir artık var: ölçüsü olmayan malzemeler doküman metnine `None None kırmızı toz biber` biçiminde girmiş; bilinçli olarak bırakıldı.
+Vektör veritabanı hazır durumda geldi: `backend/turkish_cuisine_db/` içinde **3320 tarif** var (`.gitignore`'da, repoda tutulmuyor). Kaynak JSON repoda yok, dolayısıyla ingestion'ı yeniden koşmak mümkün değil — DB'yi silme. Veride küçük bir artık var: ölçüsü olmayan malzemeler doküman metnine `None None kırmızı toz biber` biçiminde girmiş; bilinçli olarak bırakıldı.
