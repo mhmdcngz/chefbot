@@ -74,15 +74,19 @@ Bloklayan tüm çağrılar (`encode`, Chroma sorgusu, ingestion) `asyncio.to_thr
 
 ### LLM soyutlaması (`llm_service.py`)
 
-**Sağlayıcı Groq'tur.** Anthropic/Claude entegrasyonu bilinçli olarak yok — geri eklenmemeli.
+**Tek sağlayıcı: Gemini**, OpenAI-uyumlu endpoint üzerinden (`GeminiLLMService`). Groq ve Anthropic yolları bilinçli olarak kaldırıldı — geri eklenmemeli.
 
-`LLMService` Protocol'ünü uygulayan iki sınıf, `LLM_PROVIDER` ile seçilir (`get_llm_service`); bilinmeyen değer mock'a düşer:
-- `groq` — OpenAI uyumlu endpoint; 429'da `retry-after` ile 3 deneme (`_parse_retry_after`, ondalıklı başlığı da okur, 60 sn üst sınır)
-- `mock` (kod varsayılanı) — anahtarsız geliştirme; `GROQ_API_KEY` yoksa `groq` seçmek `/chat`'te 500 üretir
+**Mock sağlayıcı yok, bilinçli bir karar.** Anahtar eksikse veya API hata verirse sahte yanıt üretilmez; hata `/chat`'ten 500 + `detail` olarak döner ve frontend bunu sohbet balonunda gösterir. Bu yüzden hata mesajları kullanıcıya okunur olmalı: `_api_error` sağlayıcının gövdedeki mesajını çıkarır (`raise_for_status()` sadece durum kodunu verir, "model bulunamadı" gibi asıl bilgi gövdededir).
 
-`_trim_repetitions`: küçük modellerin takıldığı tekrar döngüsünü keser (aynı satır 2'den fazla → kalanı at). Markdown yapı satırları (`---`, `####`, `|`, `>`) sayıma girmez — tarif şablonu birden çok `---` içerdiği için bunlar sayılsaydı yanıt ortadan kırpılırdı.
+Model varsayılanı `gemini-3.5-flash-lite`. Seçim sebebi ücretsiz katman kotası: Flash Lite **500 RPD**, tam Flash modelleri yalnızca **20 RPD**. TPM (250K) hiç bağlayıcı değil, tek sınır günlük istek sayısı. Model değiştirirken bu kotayı kontrol et.
 
-Geçmiş: frontend son 8 mesajı gönderir, Groq katmanı yine son 8'i modele iletir.
+Diğer davranışlar:
+- 429'da `retry-after` ile 3 deneme (`_parse_retry_after` ondalıklı başlığı okur, 60 sn üst sınır). Ücretsiz katmanda 429 rutindir, bu yol sık çalışır.
+- `frequency_penalty`/`presence_penalty` **gönderilmiyor** — Gemini'nin uyumluluk katmanı desteklemediği parametreleri sessizce yok sayar, dolayısıyla yanıltıcı olurlardı. Tekrar koruması `_trim_repetitions` ile yapılır.
+- `_trim_repetitions`: aynı satır 2'den fazla geçerse kalanı atar. Markdown yapı satırları (`---`, `####`, `|`, `>`) sayıma girmez — tarif şablonu birden çok `---` içerdiği için bunlar sayılsaydı yanıt ortadan kırpılırdı.
+- `LLM_MAX_TOKENS` (2048) düşünme token'larını da kapsar; `LLM_REASONING_EFFORT` (low) yükseltilirse yanıt kesilebilir. Boş içerik hatası bu ikisine yönlendirir.
+
+Geçmiş: frontend son 8 mesajı gönderir, LLM katmanı yine son 8'i modele iletir.
 
 ### Ingestion (`ingestion_service.py`)
 

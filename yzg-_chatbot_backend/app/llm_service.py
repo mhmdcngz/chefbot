@@ -1,5 +1,8 @@
 """
-LLM soyutlaması: Groq (gerçek sağlayıcı) ve Mock (anahtarsız geliştirme).
+LLM katmanı: tek sağlayıcı olarak Gemini'nin OpenAI-uyumlu endpoint'i.
+
+Mock sağlayıcı bilinçli olarak yok — anahtar eksikse veya API hata verirse
+sahte yanıt üretmek yerine hata /chat üzerinden arayüze taşınır.
 """
 
 from __future__ import annotations
@@ -57,7 +60,7 @@ _STRUCTURAL_LINE = re.compile(r"^(-{3,}|\*{3,}|_{3,}|#{1,6}\s|\||>)")
 def _parse_retry_after(raw: str | None, default: float = 10.0) -> float:
     """
     429 yanıtındaki retry-after saniyesini okur.
-    Groq bu başlığı ondalıklı ("7.66") döndürebildiği için float ile ayrıştırılır;
+    Sağlayıcılar bu başlığı ondalıklı ("7.66") döndürebildiği için float ile ayrıştırılır;
     okunamazsa varsayılan, aşırı uzun beklemeyi önlemek için üst sınır 60 sn.
     """
     try:
@@ -100,8 +103,33 @@ def _build_user_content(user_message: str, context: str) -> str:
     )
 
 
-class MockLLMService:
-    """API anahtarı olmadan geliştirme ve test için sahte yanıt."""
+def _api_error(response: httpx.Response) -> RuntimeError:
+    """
+    Hata yanıtını gövdesiyle birlikte okunur hale getirir.
+    raise_for_status() yalnızca durum kodunu söyler; sağlayıcının asıl mesajı
+    ("model bulunamadı", "geçersiz API anahtarı" vb.) gövdede gelir.
+    """
+    detail = ""
+    try:
+        data = response.json()
+        if isinstance(data, dict):
+            err = data.get("error")
+            if isinstance(err, dict):
+                detail = str(err.get("message") or err)
+            elif err:
+                detail = str(err)
+    except ValueError:
+        pass
+    if not detail:
+        detail = response.text[:500]
+    return RuntimeError(f"Gemini API {response.status_code}: {detail}")
+
+
+class GeminiLLMService:
+    """
+    Gemini'nin OpenAI-uyumlu endpoint'i üzerinden yanıt üretir.
+    Başka bir OpenAI-uyumlu sağlayıcıya geçmek için GEMINI_BASE_URL + GEMINI_MODEL yeterli.
+    """
 
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
@@ -109,37 +137,11 @@ class MockLLMService:
     async def generate(
         self, user_message: str, context: str, history: list[dict] | None = None
     ) -> str:
-        await asyncio.sleep(0)
-
-        user_block = _build_user_content(user_message, context)
-        if not context.strip():
-            return (
-                "[Mock LLM] Merhaba! Şu an vektör veritabanında arama sonucu yok veya veri "
-                "yüklenmemiş. Lütfen önce ingestion ile Chroma koleksiyonunu doldurun. "
-                f"Sorduğunuz konu: «{user_message.strip()[:120]}»"
+        if not self._settings.gemini_api_key:
+            raise RuntimeError(
+                "GEMINI_API_KEY tanımlı değil. Backend klasöründe .env oluşturup "
+                "anahtarı girin (https://aistudio.google.com/apikey)."
             )
-
-        preview = context.strip().split("\n\n")[0][:400]
-        return (
-            "[Mock LLM] (Gerçek API bağlandığında bu metin model çıktısı olacak.) "
-            "Şef gözüyle kısaca: dökümanlarda şuna benzer bilgiler bulundu — "
-            f"{preview}"
-            f"{'…' if len(context) > 400 else ''} "
-            "Detaylı tarif ve teknik için yukarıdaki kaynak parçalarına güvenebilirsiniz."
-        )
-
-
-class GroqLLMService:
-    """Groq OpenAI-uyumlu endpoint ile gerçek yanıt üretir."""
-
-    def __init__(self, settings: Settings | None = None) -> None:
-        self._settings = settings or get_settings()
-
-    async def generate(
-        self, user_message: str, context: str, history: list[dict] | None = None
-    ) -> str:
-        if not self._settings.groq_api_key:
-            raise RuntimeError("GROQ_API_KEY tanımlı değil.")
 
         messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT_TURKISH_CHEF}]
         for h in (history or [])[-8:]:  # son 4 tur (8 mesaj)
@@ -149,20 +151,22 @@ class GroqLLMService:
                 messages.append({"role": role, "content": content})
         messages.append({"role": "user", "content": _build_user_content(user_message, context)})
 
+        # frequency/presence_penalty bilinçli olarak yok: Gemini'nin uyumluluk katmanı
+        # desteklemediği parametreleri sessizce yok sayıyor. Tekrar koruması
+        # _trim_repetitions ile yapılıyor.
         payload = {
-            "model": self._settings.groq_model,
+            "model": self._settings.gemini_model,
             "messages": messages,
             "temperature": 0.4,
-            "max_tokens": 1024,
-            "frequency_penalty": 0.5,
-            "presence_penalty": 0.3,
+            "max_tokens": self._settings.llm_max_tokens,
+            "reasoning_effort": self._settings.llm_reasoning_effort,
         }
         headers = {
-            "Authorization": f"Bearer {self._settings.groq_api_key}",
+            "Authorization": f"Bearer {self._settings.gemini_api_key}",
             "Content-Type": "application/json",
         }
 
-        url = f"{self._settings.groq_base_url.rstrip('/')}/chat/completions"
+        url = f"{self._settings.gemini_base_url.rstrip('/')}/chat/completions"
         timeout = httpx.Timeout(60.0, connect=15.0)
         max_retries = 3
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -174,40 +178,39 @@ class GroqLLMService:
                         await asyncio.sleep(retry_after)
                         continue
                     raise RuntimeError(
-                        f"Groq API istek limiti aşıldı ve {max_retries} deneme sonrası yanıt alınamadı. "
-                        f"Lütfen birkaç dakika bekleyip tekrar deneyin."
+                        f"Gemini API istek limiti aşıldı ({max_retries} deneme yapıldı). "
+                        f"Ücretsiz katmanda '{self._settings.gemini_model}' için günlük/dakikalık "
+                        f"kota dolmuş olabilir; birkaç dakika bekleyip tekrar deneyin."
                     )
-                response.raise_for_status()
+                if response.status_code >= 400:
+                    raise _api_error(response)
                 data = response.json()
                 break
 
         choices = data.get("choices") or []
         if not choices:
-            raise RuntimeError("Groq yanıtında choices bulunamadı.")
+            raise RuntimeError(f"Gemini yanıtında choices yok: {str(data)[:300]}")
         message = choices[0].get("message") or {}
         content = (message.get("content") or "").strip()
         if not content:
-            raise RuntimeError("Groq boş içerik döndü.")
+            finish = choices[0].get("finish_reason")
+            raise RuntimeError(
+                f"Gemini boş içerik döndü (finish_reason={finish}). "
+                "Yanıt tamamen düşünme token'larına gitmiş olabilir; "
+                "LLM_MAX_TOKENS'ı artırmayı veya LLM_REASONING_EFFORT'u düşürmeyi deneyin."
+            )
         return _trim_repetitions(content)
 
 
 def get_llm_service(settings: Settings | None = None) -> LLMService:
-    """
-    LLM_PROVIDER'a göre sağlayıcı döndürür: groq (gerçek) veya mock (anahtarsız geliştirme).
-    Bilinmeyen değerlerde güvenli tarafta kalıp mock döner.
-    """
-    s = settings or get_settings()
-    provider = (s.llm_provider or "mock").lower().strip()
-    if provider == "groq":
-        return GroqLLMService(s)
-    return MockLLMService(s)
+    """Tek sağlayıcı: Gemini. Mock yok — hata durumunda gerçek hata yüzeye çıkar."""
+    return GeminiLLMService(settings or get_settings())
 
 
 __all__ = [
     "SYSTEM_PROMPT_TURKISH_CHEF",
     "LLMService",
-    "MockLLMService",
-    "GroqLLMService",
+    "GeminiLLMService",
     "get_llm_service",
     "_build_user_content",
 ]

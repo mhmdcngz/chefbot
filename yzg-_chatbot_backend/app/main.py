@@ -4,6 +4,7 @@ FastAPI uygulaması: CORS, /chat (RAG + LLM), /health.
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -18,6 +19,8 @@ from app.config import get_settings
 from app.llm_service import get_llm_service
 from app.rag_engine import RAGEngine, RAGRetrieveResult
 from app.schemas import ChatRequest, ChatResponse, SourceItem
+
+logger = logging.getLogger(__name__)
 
 _ORDINAL_WORDS = {
     "ilk", "birinci", "ikinci", "üçüncü", "dördüncü", "beşinci",
@@ -49,6 +52,14 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["20/minute"])
 async def lifespan(app: FastAPI):
     """Uygulama ömrü: RAG motoru ve LLM servis örnekleri."""
     settings = get_settings()
+    if not settings.gemini_api_key:
+        # Sunucu yine de açılır (arayüz ve /health çalışsın diye) ama /chat hata döndürür.
+        logger.error(
+            "GEMINI_API_KEY tanımlı degil — /chat istekleri hata donecek. "
+            ".env dosyasi olusturup anahtari girin: https://aistudio.google.com/apikey"
+        )
+    else:
+        logger.info("LLM hazir: %s", settings.gemini_model)
     rag = RAGEngine(settings)
     llm = get_llm_service(settings)
     app.state.settings = settings
@@ -154,7 +165,8 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
     if rag_result.collection_empty:
         warning = (
             "Vektör koleksiyonu boş veya henüz veri yüklenmemiş. "
-            "Önce ingestion ile veri ekleyin; yanıt mock/genel modda üretilebilir."
+            "Bu yanıt tariflerinize değil, modelin genel Türk mutfağı bilgisine dayanıyor. "
+            "Veri yüklemek için: python vector_db_builder.py <dosya.json>"
         )
 
     try:
