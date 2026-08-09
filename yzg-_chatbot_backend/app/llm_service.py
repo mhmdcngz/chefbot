@@ -8,11 +8,14 @@ sahte yanıt üretmek yerine hata /chat üzerinden arayüze taşınır.
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 import httpx
 from typing import Protocol, runtime_checkable
 
 from app.config import Settings, get_settings
+
+logger = logging.getLogger("uvicorn.error")
 
 # Sistem talimatı (sabit)
 SYSTEM_PROMPT_TURKISH_CHEF = (
@@ -186,6 +189,16 @@ class GeminiLLMService:
                     raise _api_error(response)
                 data = response.json()
                 break
+
+        # Ücretsiz katmanda kota takibi için: tur başına gerçek token maliyeti.
+        usage = data.get("usage") or {}
+        if usage:
+            logger.info(
+                "Gemini usage: giris=%s cikis=%s toplam=%s",
+                usage.get("prompt_tokens"),
+                usage.get("completion_tokens"),
+                usage.get("total_tokens"),
+            )
 
         choices = data.get("choices") or []
         if not choices:

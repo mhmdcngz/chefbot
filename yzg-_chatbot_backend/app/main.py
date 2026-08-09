@@ -20,7 +20,9 @@ from app.llm_service import get_llm_service
 from app.rag_engine import RAGEngine, RAGRetrieveResult
 from app.schemas import ChatRequest, ChatResponse, SourceItem
 
-logger = logging.getLogger(__name__)
+# Uvicorn handler'ı yalnızca kendi logger'larına takar; uygulama logları da
+# görünsün diye uvicorn'un hata kanalını kullanıyoruz (aksi halde INFO kaybolur).
+logger = logging.getLogger("uvicorn.error")
 
 _ORDINAL_WORDS = {
     "ilk", "birinci", "ikinci", "üçüncü", "dördüncü", "beşinci",
