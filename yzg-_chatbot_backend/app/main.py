@@ -5,6 +5,7 @@ FastAPI uygulaması: CORS, /chat (RAG + LLM), /health.
 from __future__ import annotations
 
 import logging
+import re
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -37,13 +38,31 @@ def _is_reference_query(msg: str) -> bool:
     return len(words) <= 5 and any(w in _ORDINAL_WORDS for w in words)
 
 
+_NUMBERED_LINE = re.compile(r"^\s*\d+\.\s+\S", re.MULTILINE)
+
+
+def _offers_selection(assistant_text: str) -> bool:
+    """
+    Asistan mesajı gerçekten seçilebilir bir liste sundu mu?
+
+    Yalnızca "Hangisini istersiniz?" ifadesine bakmak yetmiyor: model bazen
+    hiç liste vermeden bu cümleyi ekliyor (ör. dökümanlarda uygun tarif
+    bulunamadığında). O durumda RAG'ı atlamak, sonraki mesajı bağlamsız
+    bırakıyordu. Frontend de çipleri numaralı satırlara göre üretiyor;
+    iki taraf aynı ölçütü kullanmalı.
+    """
+    return "Hangisini istersiniz" in assistant_text and bool(
+        _NUMBERED_LINE.search(assistant_text)
+    )
+
+
 def _is_list_selection(msg: str, history: list) -> bool:
     """Önceki bot mesajında liste varsa ve kullanıcı kısa bir seçim yaptıysa RAG'ı atla."""
     if len(msg.split()) > 7 or '?' in msg:
         return False
     for h in reversed(history):
         if h.role == "assistant":
-            return "Hangisini istersiniz" in h.content
+            return _offers_selection(h.content)
     return False
 
 
@@ -137,7 +156,12 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
     Kullanıcı mesajını alır, Chroma'dan bağlam getirir, LLM ile yanıt üretir.
     """
     msg = body.message.strip()
-    if len(msg) < 5 or len(msg.split()) < 2:
+    # Kısa mesaj koruması yalnızca sohbetin İLK mesajında anlamlı. Devamında
+    # "ikinci" ya da tek kelimelik bir tarif adı ("Menemen") geçerli bir seçimdir;
+    # burada engellenirse _is_reference_query / _is_list_selection'a hiç ulaşamaz
+    # ve seçim çipleri çalışmaz. Ayrıca koşul OR değil AND: "Kısır" (5 harf,
+    # tek kelime) meşru bir sorgudur.
+    if not body.history and len(msg) < 5 and len(msg.split()) < 2:
         return ChatResponse(
             answer="Lütfen sorunuzu daha ayrıntılı belirtin. "
                    "Örneğin: \"Tavuklu yemek tarifi ver\" veya \"Kolay bir tatlı önerir misin?\"",
