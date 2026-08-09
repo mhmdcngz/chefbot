@@ -162,7 +162,9 @@ function App() {
 
       {/* Main Content */}
       <div className="main-area">
-          <BackgroundPattern key={`bg-${messages.length}`} mode={backgroundMode} />
+          {/* key vermiyoruz: mesaj sayısına bağlı remount, deseni her mesajda
+              sıfırdan kurup animasyonu başa sardırıyordu. */}
+          <BackgroundPattern mode={backgroundMode} />
         <header className="header">
           <div className="header-left">
             <button 

@@ -654,14 +654,19 @@ body {
 }
 
 /*
- * İki özdeş katman (%50 + %50); translate 50%, kaydırılan blok yüksekliğinin tam yarısı kadar → döngüde boş çerçeve yok (ölçüm/state yok).
+ * İki özdeş katman (%50 + %50); translate 50%, kaydırılan blok yüksekliğinin tam
+ * yarısı kadar → döngüde boş çerçeve yok (ölçüm/state yok).
+ *
+ * Yön önemli: katmanlar -50%'den 0'a iner. Ters yönde (0 → 50%) alttaki katman
+ * ekranın altına kaçar ve üstte yerini alacak katman olmadığı için ikonlar
+ * animasyonun ikinci yarısında yukarıdan tükenir.
  */
 @keyframes fallDown {
   from {
-    transform: translate3d(0, 0, 0);
+    transform: translate3d(0, -50%, 0);
   }
   to {
-    transform: translate3d(0, 50%, 0);
+    transform: translate3d(0, 0, 0);
   }
 }
 
