@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { X, Heart, Trash2 } from 'lucide-react';
+import { X, Heart, Trash2, ChevronRight, MessageCircle } from 'lucide-react';
 
 export interface Favorite {
   id: string;
@@ -13,10 +13,26 @@ interface FavoritesPanelProps {
   onClose: () => void;
   favorites: Favorite[];
   onRemove: (id: string) => void;
-  onSelect: (content: string) => void;
+  /** Tarif adını sohbete soru olarak gönderir (tarif metnini değil). */
+  onAsk: (title: string) => void;
 }
 
-const FavoritesPanel: React.FC<FavoritesPanelProps> = ({ isOpen, onClose, favorites, onRemove, onSelect }) => {
+const FavoritesPanel: React.FC<FavoritesPanelProps> = ({ isOpen, onClose, favorites, onRemove, onAsk }) => {
+  // Gövdeler varsayılan olarak kapalı: panel birkaç favoriyle devasa bir kaydırma alanına dönüşmesin.
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (id: string) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
   return (
     <div className={`favorites-panel ${isOpen ? 'open' : ''}`}>
       <div className="favorites-header">
@@ -36,29 +52,45 @@ const FavoritesPanel: React.FC<FavoritesPanelProps> = ({ isOpen, onClose, favori
           </div>
         ) : (
           <ul className="favorites-list">
-            {favorites.map((fav) => (
-              <li key={fav.id} className="favorite-item">
-                <div className="favorite-item-header">
-                  <button
-                    className="favorite-item-title-btn"
-                    onClick={() => onSelect(fav.content)}
-                    title="Sohbete gönder"
-                  >
-                    {fav.title}
-                  </button>
-                  <button
-                    className="fav-remove-btn"
-                    onClick={() => onRemove(fav.id)}
-                    title="Favorilerden çıkar"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-                <div className="favorite-item-body markdown-body">
-                  <ReactMarkdown>{fav.content}</ReactMarkdown>
-                </div>
-              </li>
-            ))}
+            {favorites.map((fav) => {
+              const isExpanded = expandedIds.has(fav.id);
+              return (
+                <li key={fav.id} className={`favorite-item ${isExpanded ? 'open' : ''}`}>
+                  <div className="favorite-item-header">
+                    <button
+                      className="favorite-item-title-btn"
+                      onClick={() => toggleExpanded(fav.id)}
+                      aria-expanded={isExpanded}
+                      title={isExpanded ? 'Tarifi kapat' : 'Tarifi göster'}
+                    >
+                      <ChevronRight size={14} className="fav-chevron" />
+                      <span>{fav.title}</span>
+                    </button>
+                    <div className="favorite-item-actions">
+                      <button
+                        className="fav-ask-btn"
+                        onClick={() => onAsk(fav.title)}
+                        title="Sohbette sor"
+                      >
+                        <MessageCircle size={14} />
+                      </button>
+                      <button
+                        className="fav-remove-btn"
+                        onClick={() => onRemove(fav.id)}
+                        title="Favorilerden çıkar"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  {isExpanded && (
+                    <div className="favorite-item-body markdown-body">
+                      <ReactMarkdown>{fav.content}</ReactMarkdown>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

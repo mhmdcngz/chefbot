@@ -61,7 +61,9 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onToggleFavorite, on
           </div>
         )}
 
-        {isBot && onToggleFavorite && (
+        {/* Seçim listesi favorilenmez: başlığı "Elbette, işte tarifler:" gibi
+            anlamsız çıkıyor ve içeriği tarif değil. */}
+        {isBot && !isSelectionList && onToggleFavorite && (
           <div className="message-actions">
             <button
               className={`fav-msg-btn ${isFavorite ? 'active' : ''}`}

@@ -118,14 +118,25 @@ function App() {
     }
   };
 
+  /**
+   * Favori başlığını çıkarır. Tarif şablonu `### Tarif Adı` ile başladığı için önce
+   * ilk başlık satırı aranır; ilk satırı almak "Elbette, işte tarif:" gibi giriş
+   * cümlelerini başlık yapıyordu.
+   */
+  const extractFavoriteTitle = (text: string): string => {
+    const heading = text.match(/^#{1,6}\s+(.+)$/m);
+    const raw = (heading?.[1] ?? text.split('\n').find(line => line.trim()) ?? 'Favori')
+      .replace(/\*+/g, '')
+      .trim();
+    return raw.length > 60 ? raw.slice(0, 60) + '…' : raw;
+  };
+
   const handleToggleFavorite = (id: string, text: string) => {
     setFavorites(prev => {
       if (prev.find(f => f.id === id)) {
         return prev.filter(f => f.id !== id);
       }
-      const firstLine = text.replace(/^#+\s*/m, '').split('\n')[0].replace(/\*+/g, '').trim();
-      const title = firstLine.length > 60 ? firstLine.slice(0, 60) + '…' : firstLine;
-      return [...prev, { id, title, content: text }];
+      return [...prev, { id, title: extractFavoriteTitle(text), content: text }];
     });
   };
 
@@ -263,7 +274,7 @@ function App() {
         favorites={favorites}
         onClose={() => setIsFavoritesOpen(false)}
         onRemove={handleRemoveFavorite}
-        onSelect={(title) => {
+        onAsk={(title) => {
           setIsFavoritesOpen(false);
           handleSendMessage(title);
         }}

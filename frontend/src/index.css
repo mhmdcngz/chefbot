@@ -395,21 +395,6 @@ body {
 .recipe-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; }
 .recipe-title { font-weight: 700; font-size: 1.2rem; color: var(--text-main); }
 
-.favorite-btn {
-  background: var(--bg-dark);
-  border: 1px solid var(--border-color);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  padding: 0.5rem;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.favorite-btn:hover { color: var(--primary-color); transform: scale(1.1); background: var(--bg-card); box-shadow: var(--shadow-sm); }
-.favorite-btn.active { color: var(--primary-color); background: var(--bot-msg-bg); border-color: var(--primary-color); }
-
 .recipe-stats { display: flex; gap: 1rem; font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1.2rem; }
 .recipe-stats span { display: flex; align-items: center; gap: 0.4rem; background: var(--bg-muted); padding: 0.3rem 0.8rem; border-radius: 100px; font-weight: 500; }
 .recipe-ingredients h4, .recipe-instructions h4 { font-size: 1rem; color: var(--text-main); margin-bottom: 0.8rem; margin-top: 1.5rem; font-weight: 600; }
@@ -566,54 +551,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-}
-
-.favorite-item {
-  display: flex;
-  gap: 1rem;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 0.8rem;
-  align-items: center;
-  transition: all 0.2s ease;
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
-}
-
-.favorite-item:hover {
-  border-color: var(--primary-color);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
-}
-
-.favorite-image {
-  width: 70px;
-  height: 70px;
-  border-radius: 10px;
-  object-fit: cover;
-}
-
-.favorite-details h4 {
-  font-size: 0.95rem;
-  color: var(--text-main);
-  margin-bottom: 0.4rem;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  font-weight: 600;
-}
-
-.favorite-details span {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  background: var(--bg-muted);
-  padding: 0.2rem 0.5rem;
-  border-radius: 100px;
 }
 
 .favorites-overlay, .sidebar-overlay {
@@ -1127,21 +1064,31 @@ body {
 }
 
 /* --- Favoriler paneli (metin tabanlı) --- */
+/* Tek tanım: eski resimli kart kuralları (display:flex + align-items:center)
+   başlık ile gövdeyi yan yana diziyordu, silindi. */
 .favorite-item {
   border: 1px solid var(--border-color);
   border-radius: 10px;
-  margin-bottom: 12px;
   overflow: hidden;
 }
 .favorite-item-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 6px;
   padding: 8px 12px;
   background: var(--bg-muted);
+}
+/* Gövde kapalıyken başlık şeridi tek başına duruyor; ayırıcı çizgi yalnızca açıkken. */
+.favorite-item.open .favorite-item-header {
   border-bottom: 1px solid var(--border-color);
 }
 .favorite-item-title-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
   background: transparent;
   border: none;
   cursor: pointer;
@@ -1152,24 +1099,41 @@ body {
   padding: 0;
   transition: color 0.15s;
 }
-.favorite-item-title-btn:hover {
-  color: var(--primary-color);
-  text-decoration: underline;
+.favorite-item-title-btn:hover { color: var(--primary-color); }
+.favorite-item-title-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.fav-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+.favorite-item.open .fav-chevron { transform: rotate(90deg); }
+.favorite-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.fav-ask-btn,
 .fav-remove-btn {
   background: transparent;
   border: none;
   cursor: pointer;
   color: var(--text-muted);
-  padding: 2px;
+  padding: 4px;
   border-radius: 4px;
   line-height: 0;
+  transition: color 0.15s;
 }
+.fav-ask-btn:hover { color: var(--primary-color); }
 .fav-remove-btn:hover { color: #e53e3e; }
 .favorite-item-body {
   padding: 10px 12px;
   font-size: 0.82rem;
-  max-height: 260px;
+  max-height: 320px;
   overflow-y: auto;
 }
 
