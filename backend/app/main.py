@@ -30,13 +30,39 @@ _ORDINAL_TO_INDEX = {
     "beşinci": 5, "altıncı": 6, "yedinci": 7, "sekizinci": 8,
     "dokuzuncu": 9, "onuncu": 10,
 }
-_ORDINAL_WORDS = set(_ORDINAL_TO_INDEX) | {f"{i}." for i in range(1, 11)}
+_NUMBER_REF = re.compile(r"(\d+)(\.)?['’]?([a-zçğıöşü]{0,4})")
+
+
+def _tr_lower(text: str) -> str:
+    """Türkçe küçük harf: str.lower() "İ"yi "i̇" (noktalı birleşik) yapar, "I"yı "i" yapar."""
+    return text.replace("İ", "i").replace("I", "ı").lower()
+
+
+def _ordinal_index(word: str, allow_bare_digit: bool = False) -> int | None:
+    """
+    Tek kelimeden sıra numarası çıkarır. İyelik/hal ekleri kabul edilir:
+    "üçüncüsü", "ikincisini", "ilki", "2.si", "3'ü". Ek en fazla 4 harf —
+    "ilkbahar" gibi kelimeler sıra sayılmasın diye.
+    Yalın rakam ("2") yalnızca allow_bare_digit ile sayılır; aksi halde
+    "2 kişilik menemen" referans sorgusu sanılırdı.
+    """
+    w = word.strip(",!?:;")
+    m = _NUMBER_REF.fullmatch(w)
+    if m:
+        if m.group(2) or m.group(3) or allow_bare_digit:
+            return int(m.group(1))
+        return None
+    w = w.rstrip(".")
+    for stem, index in _ORDINAL_TO_INDEX.items():
+        if w.startswith(stem) and len(w) - len(stem) <= 4:
+            return index
+    return None
 
 
 def _is_reference_query(msg: str) -> bool:
     """Sıralı/işaret referansı içeren kısa sorgu mu? (seçim bağlamı sayılır)"""
-    words = msg.lower().split()
-    return len(words) <= 5 and any(w in _ORDINAL_WORDS for w in words)
+    words = _tr_lower(msg).split()
+    return len(words) <= 5 and any(_ordinal_index(w) is not None for w in words)
 
 
 _NUMBERED_ITEM = re.compile(r"^\s*(\d+)\.\s+(\S.*)$", re.MULTILINE)
@@ -96,16 +122,17 @@ def _resolve_selection(msg: str, items: dict[int, str]) -> str | None:
     """
     if not items:
         return None
-    lowered = msg.lower()
-    for word in lowered.split():
-        stripped = word.strip(".,!?:")
-        if stripped.isdigit() and int(stripped) in items:
-            return items[int(stripped)]
-        index = _ORDINAL_TO_INDEX.get(stripped)
+    lowered = _tr_lower(msg)
+    words = lowered.split()
+    # Yalın rakam yalnızca kısa cevapta seçimdir ("2", "2 olsun");
+    # "2 kişilik menemen" yeni bir aramadır.
+    bare_digit_ok = len(words) <= 2
+    for word in words:
+        index = _ordinal_index(word, allow_bare_digit=bare_digit_ok)
         if index in items:
             return items[index]
     for name in items.values():
-        if name.lower() in lowered or lowered in name.lower():
+        if _tr_lower(name) in lowered or lowered in _tr_lower(name):
             return name
     return None
 

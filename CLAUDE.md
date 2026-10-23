@@ -74,7 +74,7 @@ Her yolda RAG'dan geçilir; tarif metni bağlama girmeden yanıt üretilmez. Kul
 
 - `_is_reference_query` (≤5 kelime + sıra sözcüğü) veya `_is_list_selection` → seçim bağlamı
 - `_last_offered_list` son asistan mesajındaki numaralı listeyi `{sıra: tarif adı}` olarak çıkarır
-- `_resolve_selection` rakam ("2"), sıra sözcüğü ("ikinci") veya isimle eşleştirir
+- `_resolve_selection` rakam ("2"), sıra sözcüğü ("ikinci") veya isimle eşleştirir. `_ordinal_index` Türkçe ekleri kabul eder ("üçüncüsü", "ikincisini", "ilki", "2.si", "3'ü"; ek ≤4 harf). Yalın rakam yalnızca ≤2 kelimelik mesajda seçimdir — "2 kişilik menemen" yeni aramadır. Karşılaştırmalar `_tr_lower` ile yapılır (`str.lower()` "İ"yi bozar)
 - Çözülen **tarif adı** RAG sorgusu olur; ayrıca LLM'e giden mesaja `(Seçilen tarif: X ...)` notu eklenir — bağlam sırası listedeki sırayla aynı olmadığı için model aksi halde yanlış tarifi anlatıyor
 - Yalnızca seçim çözülemezse boş `RAGRetrieveResult` üretilir (kısa mesajla arama alakasız tarif getirir)
 - 5 karakterden kısa **ve** 2 kelimeden az ilk mesaj → RAG/LLM'e hiç gitmeden hazır uyarı yanıtı
