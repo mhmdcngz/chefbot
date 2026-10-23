@@ -13,22 +13,24 @@ interface ChatMessageProps {
 const ChatMessage: React.FC<ChatMessageProps> = ({ message, onToggleFavorite, onSelect, isFavorite = false }) => {
   const isBot = message.sender === 'bot';
 
-  // Seçim listesi mi? ("Hangisini istersiniz?" içeriyorsa)
-  const isSelectionList = isBot && message.text.includes('Hangisini istersiniz?');
-  const selectionItems: string[] = isSelectionList
+  // Seçim listesi mi? Ölçüt backend'deki main.py:_offers_selection ile aynı:
+  // ifade + en az bir numaralı satır.
+  const selectionItems: string[] = isBot && message.text.includes('Hangisini istersiniz')
     ? message.text
         .split('\n')
-        .filter(line => /^\d+\./.test(line.trim()))
+        .filter(line => /^\d+\.\s/.test(line.trim()))
         .map(line =>
           line
+            .trim()
             .replace(/^\d+\.\s*/, '')
-            .replace(/\*\*/g, '')
-            .split(' — ')[0]
-            .split(' - ')[0]
+            // Ayraç kümesi main.py:_ITEM_NAME_SEPARATOR ile aynı olmalı.
+            .split(/:| — | – | - /)[0]
+            .replace(/[*_`]/g, '')
             .trim()
         )
         .filter(Boolean)
     : [];
+  const isSelectionList = selectionItems.length > 0;
 
   return (
     <div className={`message-wrapper ${message.sender}`}>
@@ -40,7 +42,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onToggleFavorite, on
           <ReactMarkdown>{message.text}</ReactMarkdown>
         </div>
 
-        {isSelectionList && selectionItems.length > 0 && onSelect && (
+        {isSelectionList && onSelect && (
           <div className="selection-chips">
             {selectionItems.map((item, i) => (
               <button

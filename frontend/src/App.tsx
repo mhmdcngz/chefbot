@@ -61,7 +61,9 @@ function App() {
     setIsLoading(true);
 
     try {
-      const history = withUser.slice(0, -1).slice(-8).map((m) => ({
+      // Hata balonları geçmişe girmez: aksi halde 429 sonrası "2" yazıldığında son
+      // asistan mesajı hata metni olur, seçim çözülmez ve LLM geçmişi kirlenir.
+      const history = withUser.slice(0, -1).filter((m) => !m.isError).slice(-8).map((m) => ({
         role: m.sender === 'user' ? 'user' : 'assistant',
         content: m.text,
       }));
@@ -93,6 +95,7 @@ function App() {
         id: (Date.now() + 1).toString(),
         text: `Bir hata oluştu: ${detay}`,
         sender: 'bot',
+        isError: true,
       }];
       setMessages(withError);
       if (sessionId) syncSession(sessionId, withError);

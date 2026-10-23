@@ -61,10 +61,12 @@ Bloklayan tüm çağrılar (`encode`, Chroma sorgusu, ingestion) `asyncio.to_thr
 `llm_service.py`'deki `SYSTEM_PROMPT_TURKISH_CHEF` modelden iki mod ister: numaralı liste (son satır `Hangisini istersiniz?`) veya tek tarif şablonu. Bu ifade üç yerde string olarak aranır:
 
 1. `llm_service.py` — sistem promptu bunu üretmesini söyler
-2. `main.py:_is_list_selection` — son asistan mesajında görürse ve kullanıcı kısa cevap verdiyse mesaj **seçim** sayılır; `_last_offered_list` numaralı satırlardan tarif adlarını çıkarır
-3. `ChatMessage.tsx` — bu ifadeyi içeren yanıtta numaralı satırları ayrıştırıp tıklanabilir "seçim çipi" üretir
+2. `main.py:_offers_selection` — son asistan mesajı ifadeyi (soru işaretsiz aranır) **ve** en az bir numaralı satır içeriyorsa liste sunulmuş sayılır; `_is_list_selection` buna bakıp kısa kullanıcı cevabını **seçim** sayar, `_last_offered_list` numaralı satırlardan tarif adlarını çıkarır
+3. `ChatMessage.tsx` — aynı ölçütle (ifade + numaralı satır) tıklanabilir "seçim çipi" üretir; liste mesajında favori butonu gizlenir
 
-İfadeyi ya da liste biçimini değiştiriyorsan üçünü birlikte değiştir.
+Tarif adı satırdan aynı ayraç kümesiyle ayrılır: `:`, ` — `, ` – `, ` - ` (`main.py:_ITEM_NAME_SEPARATOR` ve `ChatMessage.tsx`'teki regex). Model `1. **Ad** — açıklama` biçimini kullanıyor; ayraçlar uyuşmazsa açıklama RAG sorgusuna ve `(Seçilen tarif: ...)` notuna karışır.
+
+İfadeyi, liste biçimini ya da ayraçları değiştiriyorsan üçünü birlikte değiştir.
 
 ### Seçim akışı ve RAG (`main.py`)
 
@@ -93,7 +95,7 @@ Diğer davranışlar:
 - `_trim_repetitions`: aynı satır 2'den fazla geçerse kalanı atar. Markdown yapı satırları (`---`, `####`, `|`, `>`) sayıma girmez — tarif şablonu birden çok `---` içerdiği için bunlar sayılsaydı yanıt ortadan kırpılırdı.
 - `LLM_MAX_TOKENS` (2048) düşünme token'larını da kapsar; `LLM_REASONING_EFFORT` (low) yükseltilirse yanıt kesilebilir. Boş içerik hatası bu ikisine yönlendirir.
 
-Geçmiş: frontend son 8 mesajı gönderir, LLM katmanı yine son 8'i modele iletir.
+Geçmiş: frontend son 8 mesajı gönderir (`isError` işaretli hata balonları hariç — aksi halde hata sonrası seçim çözülmez), LLM katmanı yine son 8'i modele iletir.
 
 ### Ingestion (`ingestion_service.py`)
 
@@ -115,4 +117,6 @@ Hız sınırı: slowapi, IP başına 20/dakika. `/chat` imzasındaki `request: R
 
 Klasörler `yzgii/` altından kök dizine taşındı (commit `fb70ed2`). `git log --follow` olmadan dosya geçmişi kopuk görünür.
 
-Vektör veritabanı hazır durumda geldi: `backend/turkish_cuisine_db/` içinde **3320 tarif** var (`.gitignore`'da, repoda tutulmuyor). Kaynak JSON repoda yok, dolayısıyla ingestion'ı yeniden koşmak mümkün değil — DB'yi silme. Veride küçük bir artık var: ölçüsü olmayan malzemeler doküman metnine `None None kırmızı toz biber` biçiminde girmiş; bilinçli olarak bırakıldı.
+Vektör veritabanı `backend/turkish_cuisine_db/` içinde, **3320 tarif** (`.gitignore`'da, repoda tutulmuyor). Kaynak `backend/recipes_groq_cleaned.json` da `.gitignore`'da; asıl kopyası https://github.com/mbesirkesen/yzg-_chatbot_backend reposunun `main` dalında. DB kaybolursa `python vector_db_builder.py` ile yeniden üretilir (GPU'da ~1 dk); ID olmadığı için upsert idempotenttir.
+
+Kaynak JSON'da 5288 malzemenin `miktar`/`birim` alanı `null`. Eski DB'de bunlar metne `None None kırmızı toz biber` olarak girmişti; `_format_ingredients` artık null alanları atlıyor. `rag_engine.py:_retrieve_sync` içindeki `None` temizliği eski biçimde üretilmiş DB'ler için savunma olarak duruyor.

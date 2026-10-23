@@ -86,10 +86,11 @@ def _format_ingredients(malzemeler: Any) -> str:
     for m in malzemeler:
         if not isinstance(m, dict):
             continue
-        miktar = m.get("miktar", "")
-        birim = m.get("birim", "")
-        isim = m.get("isim", "")
-        parts.append(f"{miktar} {birim} {isim}".strip())
+        # Alan null olabilir; get(..., "") None döndürür ve metne "None None" yazılır.
+        miktar = m.get("miktar") or ""
+        birim = m.get("birim") or ""
+        isim = m.get("isim") or ""
+        parts.append(" ".join(str(p) for p in (miktar, birim, isim) if p))
     return ", ".join(parts) if parts else "Belirtilmemiş"
 
 

@@ -40,6 +40,9 @@ def _is_reference_query(msg: str) -> bool:
 
 
 _NUMBERED_ITEM = re.compile(r"^\s*(\d+)\.\s+(\S.*)$", re.MULTILINE)
+# Liste satırında tarif adını açıklamadan ayıran işaretler. Frontend
+# (ChatMessage.tsx) seçim çiplerini aynı kümeyle ayrıştırır; ikisi uyumlu kalmalı.
+_ITEM_NAME_SEPARATOR = re.compile(r":| — | – | - ")
 
 
 def _offers_selection(assistant_text: str) -> bool:
@@ -74,8 +77,11 @@ def _last_offered_list(history: list) -> dict[int, str]:
                 return {}
             items: dict[int, str] = {}
             for num, rest in _NUMBERED_ITEM.findall(h.content):
-                # Satır biçimi "3. Çerkez Tavuğu: kısa açıklama" — adı açıklamadan ayır.
-                name = re.sub(r"[*_`]", "", rest.split(":", 1)[0]).strip(" .-")
+                # Satır biçimi "3. **Çerkez Tavuğu** — kısa açıklama" (veya ":" ile) —
+                # adı açıklamadan ayır; aksi halde açıklama RAG sorgusuna karışır.
+                name = re.sub(
+                    r"[*_`]", "", _ITEM_NAME_SEPARATOR.split(rest, maxsplit=1)[0]
+                ).strip(" .-")
                 if name:
                     items[int(num)] = name
             return items

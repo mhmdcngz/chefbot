@@ -130,7 +130,7 @@ Kabul edilen biçimler: JSON kök listesi, `{"chunks": [...]}` veya `text|conten
 | `APP_CHROMA_COLLECTION_NAME` | `turkish_cuisine` | Ingestion ve API aynı değeri kullanmalı |
 | `EMBEDDING_MODEL` | `intfloat/multilingual-e5-small` | Ingestion ve API aynı modeli kullanmalı |
 | `DEFAULT_TOP_K` | `5` | Getirilecek tarif sayısı (1-50) |
-| `CORS_ORIGINS` | — | Virgülle ayrılmış liste veya `*` |
+| `CORS_ORIGINS` | `*` | Virgülle ayrılmış liste veya `*` (bu durumda `allow_credentials` kapanır) |
 
 Hız sınırı: IP başına dakikada 20 istek (slowapi).
 

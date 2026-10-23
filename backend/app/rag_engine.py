@@ -148,10 +148,13 @@ class RAGEngine:
 
         sources: list[RetrievedSource] = []
         lines: list[str] = []
+        cleaned_docs: list[str] = []
         for i, doc in enumerate(docs):
+            # Mevcut DB'deki "None None malzeme" artığını temizler (bkz. _format_ingredients).
             doc = doc or ""
             doc = re.sub(r'\bNone\b', '', doc)
             doc = re.sub(r'\s{2,}', ' ', doc).strip()
+            cleaned_docs.append(doc)
             meta = dict(metas[i]) if i < len(metas) and metas[i] else {}
             sid = ids[i] if i < len(ids) else None
             snippet = doc[:280] + ("…" if len(doc) > 280 else "")
@@ -172,7 +175,7 @@ class RAGEngine:
         return RAGRetrieveResult(
             context=context,
             sources=sources,
-            raw_documents=list(docs),
+            raw_documents=cleaned_docs,
             collection_empty=False,
         )
 
