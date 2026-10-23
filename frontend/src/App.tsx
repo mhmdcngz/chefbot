@@ -12,7 +12,9 @@ import { getDerivedThemeVars } from './utils/themeColors';
 
 function App() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  /** Yanıtı beklenen sohbet. Doluyken yeni istek gönderilmez. */
+  const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
+  const isLoading = pendingSessionId !== null;
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -41,8 +43,21 @@ function App() {
     localStorage.setItem('chefbot-bg', backgroundMode);
   }, [backgroundMode]);
 
+  // Yanıt gelene kadar kullanıcı başka sohbete geçebilir; async handler'daki
+  // activeSessionId closure'da eski kalacağı için güncel değer ref'ten okunur.
+  const activeSessionRef = React.useRef<string | null>(activeSessionId);
+  React.useEffect(() => {
+    activeSessionRef.current = activeSessionId;
+  }, [activeSessionId]);
+
   const syncSession = (id: string, msgs: Message[]) => {
     setSessions(prev => prev.map(s => s.id === id ? { ...s, messages: msgs } : s));
+  };
+
+  /** Oturum kaydını her zaman günceller; ekranı yalnızca o oturum hâlâ açıksa. */
+  const commitMessages = (id: string, msgs: Message[]) => {
+    syncSession(id, msgs);
+    if (activeSessionRef.current === id) setMessages(msgs);
   };
 
   React.useEffect(() => {
@@ -60,22 +75,25 @@ function App() {
    * kullanılacağı için bu ayrımın parametreyle yapılması gerekiyor.
    */
   const handleSendMessage = async (text: string, freshSession = false) => {
+    // Tek giriş noktası: yazma kutusu, seçim çipleri ve favori butonu buradan geçer.
+    if (isLoading) return;
     const newUserMsg: Message = { id: Date.now().toString(), text, sender: 'user' };
     const base = freshSession ? [] : messages;
 
     let sessionId = freshSession ? null : activeSessionId;
 
-    if (base.length === 0) {
+    if (base.length === 0 || !sessionId) {
       sessionId = Date.now().toString();
       const title = text.length > 40 ? text.slice(0, 40) + '…' : text;
       setSessions(prev => [{ id: sessionId!, title, messages: [] }, ...prev]);
       setActiveSessionId(sessionId);
+      activeSessionRef.current = sessionId;
     }
+    const sid: string = sessionId;
 
     const withUser = [...base, newUserMsg];
-    setMessages(withUser);
-    if (sessionId) syncSession(sessionId, withUser);
-    setIsLoading(true);
+    commitMessages(sid, withUser);
+    setPendingSessionId(sid);
 
     try {
       // Hata balonları geçmişe girmez: aksi halde 429 sonrası "2" yazıldığında son
@@ -103,9 +121,7 @@ function App() {
         sender: 'bot',
         warning: data.warning,
       };
-      const withBot = [...withUser, botMsg];
-      setMessages(withBot);
-      if (sessionId) syncSession(sessionId, withBot);
+      commitMessages(sid, [...withUser, botMsg]);
     } catch (err) {
       const detay = err instanceof Error ? err.message : String(err);
       const withError: Message[] = [...withUser, {
@@ -114,10 +130,9 @@ function App() {
         sender: 'bot',
         isError: true,
       }];
-      setMessages(withError);
-      if (sessionId) syncSession(sessionId, withError);
+      commitMessages(sid, withError);
     } finally {
-      setIsLoading(false);
+      setPendingSessionId(null);
     }
   };
 
@@ -275,13 +290,15 @@ function App() {
                 message={msg}
                 onToggleFavorite={handleToggleFavorite}
                 onSelect={handleSendMessage}
+                selectionDisabled={isLoading}
                 isFavorite={favorites.some(f => f.id === msg.id)}
                 isHighlighted={msg.id === highlightedMessageId}
               />
             ))
           )}
           
-          {isLoading && (
+          {/* Yazıyor göstergesi yalnızca yanıtı beklenen sohbette görünür */}
+          {isLoading && pendingSessionId === activeSessionId && (
             <div className="message-wrapper bot">
               <div className="avatar bot">
                 <ChefHat size={20} />

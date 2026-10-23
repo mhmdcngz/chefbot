@@ -10,9 +10,11 @@ interface ChatMessageProps {
   isFavorite?: boolean;
   /** Favoriden açıldığında kısa süreli vurgu. */
   isHighlighted?: boolean;
+  /** Yanıt beklenirken seçim çipleri tıklanamaz. */
+  selectionDisabled?: boolean;
 }
 
-const ChatMessage: React.FC<ChatMessageProps> = ({ message, onToggleFavorite, onSelect, isFavorite = false, isHighlighted = false }) => {
+const ChatMessage: React.FC<ChatMessageProps> = ({ message, onToggleFavorite, onSelect, isFavorite = false, isHighlighted = false, selectionDisabled = false }) => {
   const isBot = message.sender === 'bot';
 
   // Seçim listesi mi? Ölçüt backend'deki main.py:_offers_selection ile aynı:
@@ -53,6 +55,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onToggleFavorite, on
               <button
                 key={i}
                 className="selection-chip"
+                disabled={selectionDisabled}
                 onClick={() => onSelect(item)}
               >
                 {item}

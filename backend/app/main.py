@@ -30,7 +30,12 @@ _ORDINAL_TO_INDEX = {
     "beşinci": 5, "altıncı": 6, "yedinci": 7, "sekizinci": 8,
     "dokuzuncu": 9, "onuncu": 10,
 }
-_NUMBER_REF = re.compile(r"(\d+)(\.)?['’]?([a-zçğıöşü]{0,4})")
+# Rakamdan sonra ek yalnızca nokta/kesme ile gelir ("2.si", "3'ü"); bitişik ek
+# ("500gr", "2kg", "3lü") birimdir, sıra değil.
+_NUMBER_REF = re.compile(r"(\d+)(?:([.'’])([a-zçğıöşü]{0,4}))?")
+# Sıra sözcüğüne gelebilecek iyelik/hal ekleri: -si, -sini, -sine, -sinde, -i,
+# -ini, -yi, -ye. Serbest harf kabul edilmez — "ilkel" "ilk" sayılmasın.
+_ORDINAL_SUFFIX = re.compile(r"(?:s?[ıiuü](?:n[ıiuü]|n[ea]|nd[ea])?|y[ıiuüea])?")
 
 
 def _tr_lower(text: str) -> str:
@@ -41,20 +46,20 @@ def _tr_lower(text: str) -> str:
 def _ordinal_index(word: str, allow_bare_digit: bool = False) -> int | None:
     """
     Tek kelimeden sıra numarası çıkarır. İyelik/hal ekleri kabul edilir:
-    "üçüncüsü", "ikincisini", "ilki", "2.si", "3'ü". Ek en fazla 4 harf —
-    "ilkbahar" gibi kelimeler sıra sayılmasın diye.
+    "üçüncüsü", "ikincisini", "ilki", "2.si", "3'ü". "ilkel", "500gr",
+    "3lü" gibi kelimeler sıra sayılmaz.
     Yalın rakam ("2") yalnızca allow_bare_digit ile sayılır; aksi halde
     "2 kişilik menemen" referans sorgusu sanılırdı.
     """
     w = word.strip(",!?:;")
     m = _NUMBER_REF.fullmatch(w)
     if m:
-        if m.group(2) or m.group(3) or allow_bare_digit:
+        if m.group(2) or allow_bare_digit:
             return int(m.group(1))
         return None
     w = w.rstrip(".")
     for stem, index in _ORDINAL_TO_INDEX.items():
-        if w.startswith(stem) and len(w) - len(stem) <= 4:
+        if w.startswith(stem) and _ORDINAL_SUFFIX.fullmatch(w[len(stem):]):
             return index
     return None
 
