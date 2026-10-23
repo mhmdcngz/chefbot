@@ -19,7 +19,9 @@ function App() {
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  
+  /** Favoriden açılan mesaj: kaydırılır ve kısa süre vurgulanır. */
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+
   const [customColor, setCustomColor] = useState<string>(() => {
     return localStorage.getItem('chefbot-color') || '#ff8c6b';
   });
@@ -43,19 +45,34 @@ function App() {
     setSessions(prev => prev.map(s => s.id === id ? { ...s, messages: msgs } : s));
   };
 
-  const handleSendMessage = async (text: string) => {
+  React.useEffect(() => {
+    if (!highlightedMessageId) return;
+    document
+      .getElementById(`msg-${highlightedMessageId}`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const timer = setTimeout(() => setHighlightedMessageId(null), 2000);
+    return () => clearTimeout(timer);
+  }, [highlightedMessageId]);
+
+  /**
+   * freshSession: mevcut sohbete eklemek yerine yeni oturum açar. Aynı handler
+   * içinde setMessages([]) sonrası çağrılsa bile closure'daki eski `messages`
+   * kullanılacağı için bu ayrımın parametreyle yapılması gerekiyor.
+   */
+  const handleSendMessage = async (text: string, freshSession = false) => {
     const newUserMsg: Message = { id: Date.now().toString(), text, sender: 'user' };
+    const base = freshSession ? [] : messages;
 
-    let sessionId = activeSessionId;
+    let sessionId = freshSession ? null : activeSessionId;
 
-    if (messages.length === 0) {
+    if (base.length === 0) {
       sessionId = Date.now().toString();
       const title = text.length > 40 ? text.slice(0, 40) + '…' : text;
       setSessions(prev => [{ id: sessionId!, title, messages: [] }, ...prev]);
       setActiveSessionId(sessionId);
     }
 
-    const withUser = [...messages, newUserMsg];
+    const withUser = [...base, newUserMsg];
     setMessages(withUser);
     if (sessionId) syncSession(sessionId, withUser);
     setIsLoading(true);
@@ -139,8 +156,25 @@ function App() {
       if (prev.find(f => f.id === id)) {
         return prev.filter(f => f.id !== id);
       }
-      return [...prev, { id, title: extractFavoriteTitle(text), content: text }];
+      return [...prev, { id, title: extractFavoriteTitle(text), content: text, sessionId: activeSessionId }];
     });
+  };
+
+  /**
+   * Favoriyi tarifin geçtiği sohbette açar ve mesaja kaydırır; yeni istek gitmez.
+   * Oturum silinmişse tarif adı yeni bir sohbette sorulur.
+   */
+  const handleOpenFavorite = (fav: Favorite) => {
+    setIsFavoritesOpen(false);
+    const session = sessions.find(s => s.id === fav.sessionId);
+    if (session && session.messages.some(m => m.id === fav.id)) {
+      setMessages(session.messages);
+      setActiveSessionId(session.id);
+      setIsSidebarOpen(false);
+      setHighlightedMessageId(fav.id);
+    } else {
+      handleSendMessage(fav.title, true);
+    }
   };
 
   const handleRemoveFavorite = (id: string) => {
@@ -242,6 +276,7 @@ function App() {
                 onToggleFavorite={handleToggleFavorite}
                 onSelect={handleSendMessage}
                 isFavorite={favorites.some(f => f.id === msg.id)}
+                isHighlighted={msg.id === highlightedMessageId}
               />
             ))
           )}
@@ -277,10 +312,7 @@ function App() {
         favorites={favorites}
         onClose={() => setIsFavoritesOpen(false)}
         onRemove={handleRemoveFavorite}
-        onAsk={(title) => {
-          setIsFavoritesOpen(false);
-          handleSendMessage(title);
-        }}
+        onOpen={handleOpenFavorite}
       />
 
       {isSettingsOpen && (

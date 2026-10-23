@@ -8,9 +8,11 @@ interface ChatMessageProps {
   onToggleFavorite?: (id: string, text: string) => void;
   onSelect?: (text: string) => void;
   isFavorite?: boolean;
+  /** Favoriden açıldığında kısa süreli vurgu. */
+  isHighlighted?: boolean;
 }
 
-const ChatMessage: React.FC<ChatMessageProps> = ({ message, onToggleFavorite, onSelect, isFavorite = false }) => {
+const ChatMessage: React.FC<ChatMessageProps> = ({ message, onToggleFavorite, onSelect, isFavorite = false, isHighlighted = false }) => {
   const isBot = message.sender === 'bot';
 
   // Seçim listesi mi? Ölçüt backend'deki main.py:_offers_selection ile aynı:
@@ -33,7 +35,10 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onToggleFavorite, on
   const isSelectionList = selectionItems.length > 0;
 
   return (
-    <div className={`message-wrapper ${message.sender}`}>
+    <div
+      id={`msg-${message.id}`}
+      className={`message-wrapper ${message.sender}${isHighlighted ? ' highlighted' : ''}`}
+    >
       <div className={`avatar ${message.sender}`}>
         {isBot ? <ChefHat size={20} /> : <User size={20} />}
       </div>

@@ -567,6 +567,14 @@ body {
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 .message-wrapper { animation: fadeIn 0.4s ease forwards; }
 
+/* Favoriden açılan mesaj: sabit başlık altında kalmasın, kısa süre parlasın */
+.message-wrapper { scroll-margin-top: 1rem; }
+@keyframes favHighlight {
+  0%, 60% { box-shadow: 0 0 0 3px var(--primary-color); }
+  100% { box-shadow: 0 0 0 3px transparent; }
+}
+.message-wrapper.highlighted .message-content { animation: favHighlight 2s ease; }
+
 .typing-indicator { display: flex; gap: 0.4rem; padding: 0.5rem; }
 .typing-dot { width: 6px; height: 6px; background: var(--primary-color); border-radius: 50%; animation: typingBounce 1.4s infinite ease-in-out; }
 .typing-dot:nth-child(1) { animation-delay: -0.32s; }

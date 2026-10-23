@@ -6,6 +6,8 @@ export interface Favorite {
   id: string;
   title: string;
   content: string;
+  /** Tarifin favorilendiği sohbet; sohbet butonu buraya döner. */
+  sessionId: string | null;
 }
 
 interface FavoritesPanelProps {
@@ -13,11 +15,11 @@ interface FavoritesPanelProps {
   onClose: () => void;
   favorites: Favorite[];
   onRemove: (id: string) => void;
-  /** Tarif adını sohbete soru olarak gönderir (tarif metnini değil). */
-  onAsk: (title: string) => void;
+  /** Favoriyi geçtiği sohbette gösterir (bkz. App.tsx:handleOpenFavorite). */
+  onOpen: (fav: Favorite) => void;
 }
 
-const FavoritesPanel: React.FC<FavoritesPanelProps> = ({ isOpen, onClose, favorites, onRemove, onAsk }) => {
+const FavoritesPanel: React.FC<FavoritesPanelProps> = ({ isOpen, onClose, favorites, onRemove, onOpen }) => {
   // Gövdeler varsayılan olarak kapalı: panel birkaç favoriyle devasa bir kaydırma alanına dönüşmesin.
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
@@ -69,8 +71,8 @@ const FavoritesPanel: React.FC<FavoritesPanelProps> = ({ isOpen, onClose, favori
                     <div className="favorite-item-actions">
                       <button
                         className="fav-ask-btn"
-                        onClick={() => onAsk(fav.title)}
-                        title="Sohbette sor"
+                        onClick={() => onOpen(fav)}
+                        title="Sohbette göster"
                       >
                         <MessageCircle size={14} />
                       </button>
